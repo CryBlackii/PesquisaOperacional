@@ -37,18 +37,19 @@ exports.lerTxt = lerTxt;
 exports.lerRestricoes = lerRestricoes;
 exports.lerQuantidadeX = lerQuantidadeX;
 exports.adicionarVariaveis = adicionarVariaveis;
+exports.adicionarVariaveis2 = adicionarVariaveis2;
 exports.preencherMatriz = preencherMatriz;
 const fs = __importStar(require("fs"));
 function lerTxt() {
     const array = fs.readFileSync("entrada.txt", "utf-8")
-        .split("\n") //divide as linhas
-        .map(linha => linha.trim().replace(/\s+/g, "")) //tira os espaços
-        .filter(linha => linha !== ""); //tira as linhas vazias
+        .split("\n")
+        .map(linha => linha.trim().replace(/\s+/g, ""))
+        .filter(linha => linha !== "");
     return array;
 }
 function lerRestricoes(array) {
     let contadorDeLinhas = 0;
-    for (let i = 1; i < array.length; i++) { //pra começar direto na segunda linha
+    for (let i = 1; i < array.length; i++) {
         if (array[i].includes(">=") || array[i].includes("<=")) {
             contadorDeLinhas++;
         }
@@ -56,16 +57,16 @@ function lerRestricoes(array) {
     return contadorDeLinhas;
 }
 function lerQuantidadeX(array) {
-    let contadorDeX = 0; //vai ver quantos X tem na primeira linha
+    let contadorDeX = 0;
     for (let i = 0; i < array[0].length; i++) {
         if (array[0][i] === "x") {
             contadorDeX++;
         }
     }
-    let tipoOtimizacao; //vai ver se é max ou min
+    let tipoOtimizacao;
     if (array[0].toLocaleLowerCase().startsWith("max")) {
         tipoOtimizacao = "max";
-        contadorDeX--; // tira um x, pq max tem x, né
+        contadorDeX--;
     }
     else {
         tipoOtimizacao = "min";
@@ -73,7 +74,7 @@ function lerQuantidadeX(array) {
     return [contadorDeX, tipoOtimizacao];
 }
 function adicionarVariaveis(array, contadorDeX) {
-    let indiceVariavelArtificial = contadorDeX + 1; // começa a numerar depois das variaveis que já tem
+    let indiceVariavelArtificial = contadorDeX + 1;
     const valoresDesigualdade = [];
     for (let i = 1; i < array.length; i++) {
         if (array[i].includes(">=")) {
@@ -95,11 +96,38 @@ function adicionarVariaveis(array, contadorDeX) {
     }
     return valoresDesigualdade;
 }
+function adicionarVariaveis2(array) {
+    const valoresDesigualdade = [];
+    let indiceSlack = 1;
+    let indiceArtificial = 1;
+    for (let i = 0; i < array.length; i++) {
+        if (array[i].includes("<=")) {
+            const [lhs, rhs] = array[i].split("<=");
+            valoresDesigualdade.push(eval(rhs));
+            array[i] = `${lhs}+s${indiceSlack}=${rhs}`;
+            indiceSlack++;
+        }
+        else if (array[i].includes(">=")) {
+            const [lhs, rhs] = array[i].split(">=");
+            valoresDesigualdade.push(eval(rhs));
+            array[i] = `${lhs}-s${indiceSlack}+a${indiceArtificial}=${rhs}`;
+            indiceSlack++;
+            indiceArtificial++;
+        }
+        else if (array[i].includes("=")) {
+            const [lhs, rhs] = array[i].split("=");
+            valoresDesigualdade.push(eval(rhs));
+            array[i] = `${lhs}+a${indiceArtificial}=${rhs}`;
+            indiceArtificial++;
+        }
+    }
+    return [array, valoresDesigualdade];
+}
 function preencherMatriz(array, contadorDeX, contadorDeLinhas) {
-    const matrizCompleta = Array(array.length - 1) //aqui vai criar a matriz no tamanho certin
+    const matrizCompleta = Array(array.length - 1)
         .fill(0)
         .map(() => Array(contadorDeX + contadorDeLinhas).fill(0));
-    const regex = /([+-]?\d*\.?\d*)\*?x(\d+)/g; // regex pra pegar os numeros
+    const regex = /([+-]?\d*\.?\d*)\*?x(\d+)/g;
     const vetorExpressaoPrincipal = [];
     for (let i = 0; i < array.length; i++) {
         const expr = array[i];
@@ -107,21 +135,21 @@ function preencherMatriz(array, contadorDeX, contadorDeLinhas) {
         while ((match = regex.exec(expr)) !== null) {
             let coef = match[1];
             const xIndex = parseInt(match[2]) - 1;
-            if (coef === "" || coef === "+") { // vai pegar os lugares onde estiver só x/-x e colocar 1/-1
+            if (coef === "" || coef === "+") {
                 coef = "1";
             }
             else if (coef === "-") {
                 coef = "-1";
             }
-            if (i === 0) { // ve se é a função objetivo no lugar das restrições
+            if (i === 0) {
                 vetorExpressaoPrincipal.push(parseFloat(coef));
             }
             else {
-                matrizCompleta[i - 1][xIndex] = parseFloat(coef); // se não só taca nas restrições
+                matrizCompleta[i - 1][xIndex] = parseFloat(coef);
             }
         }
     }
-    for (let i = 0; i < contadorDeLinhas; i++) { // vai encher de zero no resto, ebaaa
+    for (let i = 0; i < contadorDeLinhas; i++) {
         vetorExpressaoPrincipal.push(0);
     }
     return [matrizCompleta, vetorExpressaoPrincipal];
