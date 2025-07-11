@@ -1,13 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.multiplicaMatriz = multiplicaMatriz;
-/**
- * Realiza a multiplicação de duas matrizes.
- * @param matriz1 A primeira matriz (A).
- * @param matriz2 A segunda matriz (B).
- * @returns A matriz resultante da multiplicação (C = A * B).
- * @throws Um erro se as dimensões das matrizes forem incompatíveis para multiplicação.
- */
 function multiplicaMatriz(matriz1, matriz2) {
     // Verifica se o número de colunas da primeira matriz é igual ao número de linhas da segunda.
     if (matriz1[0].length !== matriz2.length) {

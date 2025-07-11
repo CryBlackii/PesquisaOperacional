@@ -1,13 +1,7 @@
 import * as fs from "fs";
 
-/**
- * Lê um arquivo de texto chamado "entrada.txt", formata seu conteúdo e o retorna como um array de strings.
- * @returns Um array de strings, onde cada string é uma linha tratada do arquivo.
- */
 export function lerTxt(): string[] {
-    // Lê o arquivo de forma síncrona, converte para string utf-8.
     const array = fs.readFileSync("entrada.txt", "utf-8")
-        // Divide o arquivo em um array de linhas.
         .split("\n")
         // Para cada linha, remove espaços em branco no início e no fim (trim) e remove todos os espaços internos (replace).
         .map(linha => linha.trim().replace(/\s+/g, ""))
@@ -16,12 +10,6 @@ export function lerTxt(): string[] {
     return array;
 }
 
-/**
- * Converte o array de strings (representando o problema de PL) em uma estrutura de dados organizada.
- * @param array O array de strings lido do arquivo de texto.
- * @returns Um objeto contendo o tipo de otimização, coeficientes da função objetivo,
- * matriz de coeficientes das restrições, valores do lado direito (RHS) e os tipos de restrição.
- */
 export function parseProblem(array: string[]): {
     optimizationType: string,
     objectiveCoefficients: number[],
@@ -29,14 +17,12 @@ export function parseProblem(array: string[]): {
     constraintRhs: number[],
     constraintTypes: string[]
 } {
-    // --- 1. Análise da Função Objetiva ---
     const objectiveStr = array[0]; // A primeira linha é sempre a função objetivo.
     // Determina se é um problema de maximização ou minimização.
     const optimizationType = objectiveStr.toLowerCase().startsWith("max") ? "max" : "min";
     
-    // Expressão regular para encontrar todas as variáveis de decisão (ex: x1, x2, x10).
     const decisionVarRegex = /x(\d+)/g;
-    let maxVarIndex = 0; // Armazena o maior índice de variável encontrado (ex: em x10, o índice é 10).
+    let maxVarIndex = 0; // Armazena o maior índice de variável encontrado
     let match;
     const fullText = array.join(' '); // Junta todo o problema em uma string para encontrar todas as variáveis.
     // Loop para encontrar o maior índice de variável de decisão no problema inteiro.
@@ -50,41 +36,38 @@ export function parseProblem(array: string[]): {
     // Expressão regular para capturar os coeficientes e os índices das variáveis (ex: -2*x1, +x2).
     const coeffRegex = /([+-]?\d*\.?\d*)\*?x(\d+)/g;
     
-    // Loop para extrair os coeficientes da string da função objetivo.
     while ((match = coeffRegex.exec(objectiveStr)) !== null) {
         let coef = match[1]; // O coeficiente capturado (pode ser "", "+", "-", ou um número).
         // Trata coeficientes implícitos (ex: "x2" tem coeficiente 1, "-x3" tem -1).
         if (coef === "" || coef === "+") coef = "1";
         else if (coef === "-") coef = "-1";
-        const xIndex = parseInt(match[2]) - 1; // Converte o índice da variável (x1 -> 0, x2 -> 1).
+        const xIndex = parseInt(match[2]) - 1;
         if(xIndex < numDecisionVars) {
-            objectiveCoefficients[xIndex] = parseFloat(coef); // Armazena o coeficiente na posição correta.
+            objectiveCoefficients[xIndex] = parseFloat(coef); 
         }
     }
 
-    // --- 2. Análise das Restrições ---
-    const constraints = array.slice(1); // Pega todas as linhas exceto a primeira (que era a função objetivo).
-    const numConstraints = constraints.length; // O número de restrições.
-    // Cria a matriz de coeficientes das restrições, inicializada com zeros.
+    const constraints = array.slice(1); // Pega todas as linhas exceto a primeira 
+    const numConstraints = constraints.length; 
+    // Cria a matriz de coeficientes das restrições, inicializada com zeros
     const constraintMatrix: number[][] = Array.from({ length: numConstraints }, () => Array(numDecisionVars).fill(0));
-    const constraintRhs: number[] = []; // Array para armazenar os valores do lado direito (RHS).
+    const constraintRhs: number[] = []; 
     const constraintTypes: string[] = []; // Array para armazenar os tipos de inequação ('<=', '>=', '=').
 
-    // Itera sobre cada string de restrição.
     for (let i = 0; i < numConstraints; i++) {
         const constraintStr = constraints[i];
-        let separator: string; // Armazena o tipo de separador da restrição.
+        let separator: string;
         // Identifica o tipo de restrição.
         if (constraintStr.includes(">=")) separator = ">=";
         else if (constraintStr.includes("<=")) separator = "<=";
         else separator = "=";
 
-        // Divide a restrição em lado esquerdo (LHS) e lado direito (RHS).
+        // Divide a restrição em lado esquerdo e lado direito
         const [lhs, rhs] = constraintStr.split(separator);
-        constraintTypes.push(separator); // Armazena o tipo.
-        constraintRhs.push(eval(rhs)); // Armazena o valor do RHS (usa 'eval' para calcular expressões como "5*2").
+        constraintTypes.push(separator); 
+        constraintRhs.push(eval(rhs)); // Armazena o valor do lado direito
         
-        // Usa a mesma lógica da função objetivo para extrair os coeficientes do LHS da restrição.
+        // Usa a mesma lógica da função objetivo para extrair os coeficientes do lado esquerdo da restrição.
         const coeffRegexConst = /([+-]?\d*\.?\d*)\*?x(\d+)/g;
         while ((match = coeffRegexConst.exec(lhs)) !== null) {
             let coef = match[1];
@@ -92,11 +75,10 @@ export function parseProblem(array: string[]): {
             else if (coef === "-") coef = "-1";
             const xIndex = parseInt(match[2]) - 1;
             if(xIndex < numDecisionVars){
-                constraintMatrix[i][xIndex] = parseFloat(coef); // Armazena o coeficiente na matriz de restrições.
+                constraintMatrix[i][xIndex] = parseFloat(coef);
             }
         }
     }
 
-    // Retorna o objeto com todo o problema parseado.
     return { optimizationType, objectiveCoefficients, constraintMatrix, constraintRhs, constraintTypes };
 }

@@ -1,8 +1,3 @@
-/**
- * Cria uma matriz identidade de mesma dimensão de uma matriz quadrada fornecida.
- * @param matrizQuadrada A matriz que serve de referência para o tamanho.
- * @returns A matriz identidade correspondente.
- */
 export function criarMatrizIdentidade(matrizQuadrada : number[][]) : number[][]{
     const tamanho = matrizQuadrada.length;
     // Cria uma matriz preenchida com zeros.
@@ -14,12 +9,6 @@ export function criarMatrizIdentidade(matrizQuadrada : number[][]) : number[][]{
     return identidade;
 }
 
-/**
- * Calcula a matriz inversa de uma matriz quadrada usando o método de eliminação de Gauss-Jordan.
- * @param matrizQuadrada A matriz a ser invertida (A).
- * @param identidade A matriz identidade de mesma dimensão.
- * @returns A matriz inversa (A⁻¹) ou null se a matriz for singular (não invertível).
- */
 export function criarMatrizInversa(matrizQuadrada : number[][], identidade : number[][]) : number[][] | null{
     const tamanho = matrizQuadrada.length;
     

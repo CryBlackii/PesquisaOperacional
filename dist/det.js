@@ -1,19 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.calcularDeterminante = calcularDeterminante;
-/**
- * Calcula o determinante de uma matriz quadrada usando a expansão de Laplace.
- * @param matriz A matriz quadrada.
- * @returns O valor do determinante.
- */
 function calcularDeterminante(matriz) {
     const n = matriz.length;
-    // Caso base: se a matriz é 1x1, o determinante é o próprio elemento.
-    if (n === 1) {
+    if (n === 1) { //caso a matriz seja 1x1 vai retornar o proprio elemento como det.
         return matriz[0][0];
     }
     let det = 0;
-    const linha = 0; // Expansão será feita ao longo da primeira linha.
+    const linha = 0;
     // Itera pelas colunas da primeira linha para calcular os cofatores.
     for (let coluna = 0; coluna < n; coluna++) {
         // O cofator é (-1)^(i+j).
@@ -27,13 +21,6 @@ function calcularDeterminante(matriz) {
     }
     return det;
 }
-/**
- * Cria uma submatriz removendo uma linha e uma coluna específicas.
- * @param matriz A matriz original.
- * @param linha A linha a ser removida.
- * @param coluna A coluna a ser removida.
- * @returns A submatriz resultante.
- */
 function subMatriz(matriz, linha, coluna) {
     // Filtra as linhas, removendo a linha especificada.
     return matriz

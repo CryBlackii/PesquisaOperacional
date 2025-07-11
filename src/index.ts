@@ -2,12 +2,9 @@ import * as fs from "fs";
 import { faseI, faseII } from "./simplex";
 import { parseProblem, lerTxt } from "./leitura";
 
-/**
- * Função principal que orquestra a leitura, padronização e resolução do problema de Programação Linear.
- */
 function main() {
     try {
-        // Lê e interpreta o problema do arquivo "entrada.txt".
+        // vai ler o arquivo txt q foi mandando no leitura
         const fileContent = lerTxt();
         let {
             optimizationType,
@@ -17,11 +14,10 @@ function main() {
             constraintTypes
         } = parseProblem(fileContent);
 
-        // --- 1. Padronização do Problema: Lado Direito (RHS) Não-Negativo ---
-        // Garante que todos os valores no vetor 'b' (RHS) sejam não-negativos.
+        // Garante que todos os valores no vetor b sejam não negativo
         for (let i = 0; i < constraintRhs.length; i++) {
             if (constraintRhs[i] < 0) {
-                // Se um valor do RHS é negativo, multiplica a restrição inteira por -1.
+                // Se um valor do lado direito é negativo, multiplica a restrição inteira por -1.
                 constraintRhs[i] *= -1;
                 constraintMatrix[i] = constraintMatrix[i].map(c => -c);
                 // Inverte o sinal da desigualdade.
@@ -30,8 +26,8 @@ function main() {
             }
         }
         
-        // --- 2. Preparação para o Simplex: Forma Padrão (FPI) ---
-        let needsPhase1 = false; // Flag para determinar se a Fase I é necessária.
+        // prepara o Simplex para forma padrão
+        let needsPhase1 = false; // aqui checa se a Fase I é necessária.
         const numDecisionVars = objectiveCoefficients.length;
         const numConstraints = constraintMatrix.length;
         
@@ -41,7 +37,7 @@ function main() {
             if (type === '<=' || type === '>=') numExtraVars++;
         });
 
-        // Cria a matriz inicial (tableau) com espaço para as variáveis de decisão e de folga/excesso.
+        // Cria a matriz inicial com espaço para as variáveis de decisão e de folga/excesso.
         const tableauMatrix = Array.from({ length: numConstraints }, () => Array(numDecisionVars + numExtraVars).fill(0));
         
         // Se for um problema de maximização, inverte-se o sinal da função objetivo para tratá-lo como minimização.
@@ -49,7 +45,7 @@ function main() {
         if (optimizationType === 'max') {
             finalObjectiveCoeffs = finalObjectiveCoeffs.map(c => -c);
         }
-        // Adiciona os custos das variáveis de folga/excesso (que é zero) à função objetivo.
+        // Adiciona os custos das variáveis de folga/excesso à função objetivo.
         finalObjectiveCoeffs.push(...Array(numExtraVars).fill(0));
         
         let extraVarIndex = 0;
@@ -61,7 +57,7 @@ function main() {
                 // Adiciona variável de folga (+1).
                 tableauMatrix[i][numDecisionVars + extraVarIndex] = 1;
                 extraVarIndex++;
-            } else if (constraintTypes[i] === '>=') {
+            } else if (constraintTypes[i] === '>=') { //caso B aqui
                 // Adiciona variável de excesso (-1).
                 tableauMatrix[i][numDecisionVars + extraVarIndex] = -1;
                 needsPhase1 = true; // Restrições '>=' exigem Fase I.
@@ -74,12 +70,12 @@ function main() {
         
         let resultado: [number, number[], number] | null = null;
 
-        // --- 3. Execução do Simplex ---
+        // execução do Simplex
         if (needsPhase1) {
             // Se houver restrições '>=' ou '=', chama a Fase I para encontrar uma solução básica viável inicial.
             resultado = faseI(tableauMatrix, constraintRhs, finalObjectiveCoeffs, optimizationType, constraintTypes);
         } else {
-            // CASO A: Se todas as restrições são '<=', a origem é uma solução viável.
+            // Se todas as restrições são '<=', a origem é uma solução viável, ou seja caso A
             // A base inicial é formada pelas variáveis de folga.
             const colunasParaBasica = Array.from({length: numConstraints}, (_, i) => numDecisionVars + i);
             const colunasParaNaoBasica = Array.from({length: numDecisionVars}, (_, i) => i);
@@ -100,7 +96,6 @@ function main() {
             );
         }
 
-        // --- 4. Apresentação dos Resultados ---
         if (resultado) {
             let [valorOtimo, vetorSolucao, iteracoes] = resultado;
             
@@ -125,10 +120,8 @@ function main() {
                 }
             }
         } else {
-            // Mensagem caso o problema não tenha solução.
-            console.log("Problema não possui solução ótima finita (pode ser inviável ou ilimitado).");
+            console.log("É inviavel ou ilimitado");
         }
-
         return resultado;
     } catch (error) {
         console.error("Erro:", error instanceof Error ? error.message : String(error));
@@ -136,5 +129,4 @@ function main() {
     }
 }
 
-// Ponto de entrada do programa.
 main();

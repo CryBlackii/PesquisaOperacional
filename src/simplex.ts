@@ -1,16 +1,6 @@
 import { criarMatrizInversa, criarMatrizIdentidade } from "./inversa";
 import { multiplicaMatriz } from "./mult";
 
-/**
- * Implementa a Fase I do método Simplex de Duas Fases.
- * O objetivo é encontrar uma Solução Básica Viável inicial para o problema original.
- * @param matrizOriginal A matriz de restrições já com vars de folga/excesso.
- * @param valoresDesigualdade O vetor 'b' (RHS).
- * @param vetorExpressaoPrincipal O vetor de custos 'c' original.
- * @param tipoOtimizacao 'max' ou 'min'.
- * @param constraintTypes Os tipos de restrição originais.
- * @returns O resultado da Fase II se uma solução viável for encontrada, ou null se o problema for inviável.
- */
 export function faseI(
     matrizOriginal: number[][], 
     valoresDesigualdade: number[], 
@@ -19,10 +9,10 @@ export function faseI(
     constraintTypes: string[]
 ): [number, number[], number] | null {
     const m = matrizOriginal.length; // número de restrições
-    const n = matrizOriginal[0].length; // número de vars (decisão + folga/excesso)
+    const n = matrizOriginal[0].length;
     const numDecisionVars = n - (constraintTypes.filter(t => t !== '=').length);
 
-    // --- 1. Adicionar Variáveis Artificiais ---
+    // Adicionar Variáveis Artificiais
     let artificialVarCount = 0;
     // Conta quantas variáveis artificiais são necessárias (uma para cada '>=' ou '=').
     constraintTypes.forEach(type => {
@@ -37,29 +27,29 @@ export function faseI(
     let currentArtificialIndex = 0;
     const colunasParaBasica: number[] = []; // Índices das variáveis na base inicial.
     
-    // --- 2. Montar a Base Inicial para a Fase I ---
-    let slackSurplusIndex = 0;
+    // Montar a Base Inicial para a Fase I
+   let slackSurplusIndex = 0;
+
     for (let i = 0; i < m; i++) {
-        if (constraintTypes[i] === '<=') {
-            // Se a restrição é '<=', a variável de folga entra na base.
-            colunasParaBasica.push(numDecisionVars + slackSurplusIndex);
-            slackSurplusIndex++;
-        } else if (constraintTypes[i] === '>=') {
-            // Se é '>=', adiciona +1 na coluna da variável artificial e ela entra na base.
-            matrizComArtificiais[i][n + currentArtificialIndex] = 1;
-            colunasParaBasica.push(n + currentArtificialIndex);
-            currentArtificialIndex++;
-            slackSurplusIndex++;
-        } else { // '='
-            // Se é '=', adiciona +1 na coluna da variável artificial e ela entra na base.
-            matrizComArtificiais[i][n + currentArtificialIndex] = 1;
-            colunasParaBasica.push(n + currentArtificialIndex);
-            currentArtificialIndex++;
-        }
+    if (constraintTypes[i] === '<=') { // era aqui um dos erros tbm****
+        // excesso +1
+        colunasParaBasica.push(numDecisionVars + slackSurplusIndex);
+        slackSurplusIndex++;
+    } else if (constraintTypes[i] === '>=') {
+        // excesso -1
+        matrizComArtificiais[i][numDecisionVars + slackSurplusIndex] = -1; // Variável de excesso
+        matrizComArtificiais[i][n + currentArtificialIndex] = 1; // Variável artificial
+        colunasParaBasica.push(n + currentArtificialIndex); // Base = artificial
+        currentArtificialIndex++;
+        slackSurplusIndex++; // Incrementa apenas para rastrear a coluna de excesso
+    } else { // '='
+        // excesso =
+        matrizComArtificiais[i][n + currentArtificialIndex] = 1;
+        colunasParaBasica.push(n + currentArtificialIndex);
+        currentArtificialIndex++;
     }
+}
     
-    // --- 3. Criar a Função Objetivo Artificial ---
-    // O objetivo da Fase I é minimizar a soma das variáveis artificiais (w = a1 + a2 + ...).
     const expressaoArtificial = Array(n + artificialVarCount).fill(0);
     // O custo é 1 para as variáveis artificiais e 0 para as outras.
     colunasParaBasica.forEach((basicVarIndex, i) => {
@@ -79,10 +69,10 @@ export function faseI(
     });
     
     const custoArtificial = [...expressaoArtificial];
-    // Ajusta a função objetivo artificial para a forma canônica (custos relativos das vars básicas devem ser 0).
+    // arruma a função objetivo artificial, ou seja arruma para o custos relativos das variaveis básicas devem ser 0.
     for (let i = 0; i < m; i++) {
         const basicVarIndex = colunasParaBasica[i];
-        if (custoArtificial[basicVarIndex] === 1) { // Se uma var artificial está na base...
+        if (custoArtificial[basicVarIndex] === 1) {
             // Subtrai a linha da restrição correspondente da linha de custo.
             for (let j = 0; j < custoArtificial.length; j++) {
                 custoArtificial[j] -= matrizComArtificiais[i][j];
@@ -93,8 +83,7 @@ export function faseI(
     const matrizBasicaFase1 = matrizComArtificiais.map(linha => colunasParaBasica.map(i => linha[i]));
     const matrizNaoBasicaFase1 = matrizComArtificiais.map(linha => colunasParaNaoBasica.map(i => linha[i]));
     
-    // --- 4. Resolver o Problema da Fase I ---
-    // Chama a Fase II para resolver o problema artificial (minimizar w).
+    // Chama a Fase II para resolver o problema artificial
     const resultadoFase1 = faseII(
         matrizComArtificiais,
         matrizBasicaFase1,
@@ -106,21 +95,17 @@ export function faseI(
         "min"
     );
 
-    // --- 5. Verificar o Resultado da Fase I ---
-    // Se o resultado é nulo ou o custo ótimo (soma das vars artificiais) for > 0, o problema original é inviável.
+    // Se o resultado é nulo ou o custo ótimo for 0 > 1e-6 (Tolerância numérica para evitar falsos positivos), o problema original é inviável.
     if (resultadoFase1 === null || resultadoFase1[0] > 1e-6) {
-        console.log("Problema inviável (Fase I terminou com custo > 0).");
         return null;
     }
     
-    // Verifica se alguma variável artificial permaneceu na base com valor não nulo (caso degenerado, pode indicar inviabilidade).
+    // Verifica se alguma variável artificial permaneceu na base com valor não nulo
     const artificialNaBase = colunasParaBasica.some(varIndex => varIndex >= n);
     if (artificialNaBase) {
-        console.log("Problema inviável (variáveis artificiais na base no final da Fase I).");
-        return null; // Simplificação: trata casos degenerados como inviáveis.
+        return null; // trata casos degenerados como inviáveis.
     }
 
-    // --- 6. Preparar e Chamar a Fase II ---
     // Se a Fase I foi bem-sucedida, a base encontrada é viável para o problema original.
     // Remove as colunas das variáveis artificiais e usa a base encontrada para iniciar a Fase II.
     const novaColunasParaBasica = [...colunasParaBasica];
@@ -149,11 +134,6 @@ export function faseI(
     );
 }
 
-/**
- * Implementa a Fase II do método Simplex Revisado.
- * A partir de uma Solução Básica Viável, itera até encontrar a solução ótima.
- * @returns Uma tupla com [valor ótimo, vetor solução, número de iterações] ou null se o problema for ilimitado.
- */
 export function faseII(
     matrizCompleta: number[][],
     matrizBasica: number[][], // Matriz B
@@ -167,22 +147,20 @@ export function faseII(
 ): [number, number[], number] | null {
     // Critério de parada para evitar loops infinitos.
     if (iteracao >= 100) {
-        console.log("Número máximo de iterações atingido");
         return null;
     }
 
-    // --- Passo 1: Calcular a inversa da matriz básica (B⁻¹) ---
+    //Calcular a inversa da matriz básica (B⁻¹)
     const inversaBasica = criarMatrizInversa(matrizBasica, criarMatrizIdentidade(matrizBasica));
     if (!inversaBasica) {
-        console.log("Matriz básica não é invertível");
         return null;
     }
 
-    // --- Passo 2: Calcular a solução básica atual (xB = B⁻¹ * b) ---
+    //Calcular a solução básica atual (xB = B⁻¹ * b)
     const vetorB = valoresDesigualdade.map(i => [i]);
     const xBasico = multiplicaMatriz(inversaBasica, vetorB);
     
-    // --- Passo 3: Calcular os custos relativos (critério de entrada) ---
+    //Calcular os custos relativos (critério de entrada)
     const custoBasico = [colunasParaBasica.map(i => vetorExpressaoPrincipal[i] || 0)]; // Vetor cB
     const yt = multiplicaMatriz(custoBasico, inversaBasica); // Vetor de multiplicadores simplex (yT = cB * B⁻¹)
     const custoNaoBasico = [colunasParaNaoBasica.map(i => vetorExpressaoPrincipal[i] || 0)]; // Vetor cN
@@ -195,7 +173,6 @@ export function faseII(
 
     const menorCusto = Math.min(...custoRelativo);
     
-    // --- Passo 4: Checar a otimalidade ---
     // Se todos os custos relativos são não-negativos, a solução atual é ótima.
     if (menorCusto >= -1e-9) { // Usa uma tolerância para comparação com zero.
         let valorOtimo = 0;
@@ -211,12 +188,10 @@ export function faseII(
         return [valorOtimo, vetorSolucao, iteracao];
     }
     
-    // --- Passo 5: Determinar a variável que entra na base ---
-    // A variável que entra é a que tem o custo relativo mais negativo.
+    //Determinar a variável que entra na base, a variável que entra é a que tem o custo relativo mais negativo pra ser mais rapidex
     const indiceVariavelEntrada = custoRelativo.indexOf(menorCusto);
 
-    // --- Passo 6: Determinar a variável que sai da base (critério da razão) ---
-    // Calcular a direção simplex: d = B⁻¹ * a_k (onde a_k é a coluna da var que entra)
+    // Determinar a variável que sai da base
     const direcao = multiplicaMatriz(
         inversaBasica,
         matrizCompleta.map(linha => [linha[colunasParaNaoBasica[indiceVariavelEntrada]]])
@@ -224,9 +199,8 @@ export function faseII(
 
     let passo = Infinity;
     let indiceSaida = -1;
-    // Teste da razão: min { xB_i / d_i } para d_i > 0
     for (let i = 0; i < direcao.length; i++) {
-        if (direcao[i][0] > 1e-9) { // Apenas para componentes positivos da direção.
+        if (direcao[i][0] > 1e-9) {
             const razao = xBasico[i][0] / direcao[i][0];
             if (razao < passo) {
                 passo = razao;
@@ -235,15 +209,12 @@ export function faseII(
         }
     }
 
-    // --- Passo 7: Checar se o problema é ilimitado ---
-    // Se todos os d_i <= 0, o problema não tem solução ótima finita (é ilimitado).
+    // o problema não tem solução ótima finita
     if (indiceSaida === -1) {
-        console.log("Problema ilimitado (nenhuma variável de saída encontrada).");
         return null;
     }
 
-    // --- Passo 8: Atualizar a base ---
-    // A variável que entra (entrada) troca de lugar com a variável que sai (saida).
+    // aqui vai atualizar a base, com isso a variavel que entra (das não basicas) troca de lugar com a variável que sai
     const entrada = colunasParaNaoBasica[indiceVariavelEntrada];
     const saida = colunasParaBasica[indiceSaida];
     
@@ -251,7 +222,6 @@ export function faseII(
     colunasParaNaoBasica[indiceVariavelEntrada] = saida;
     colunasParaNaoBasica.sort((a,b)=>a-b); // Mantém a ordem para consistência.
 
-    // --- Passo 9: Recursão ---
     // Chama a próxima iteração com a nova base.
     return faseII(
         matrizCompleta,
