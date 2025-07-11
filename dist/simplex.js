@@ -2,41 +2,90 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.faseI = faseI;
 exports.faseII = faseII;
-exports.verificaFaseI = verificaFaseI;
 const inversa_1 = require("./inversa");
 const mult_1 = require("./mult");
-function faseI(matrizCompleta, valoresDesigualdade, vetorExpressaoPrincipal, tipoOtimizacao) {
-    const m = matrizCompleta.length;
-    const n = matrizCompleta[0].length;
-    // Adiciona variáveis artificiais
-    const matrizComArtificiais = matrizCompleta.map((linha, i) => {
-        const artificiais = Array(m).fill(0);
-        artificiais[i] = 1;
-        return [...linha, ...artificiais];
+function faseI(matrizOriginal, valoresDesigualdade, vetorExpressaoPrincipal, tipoOtimizacao, constraintTypes) {
+    const m = matrizOriginal.length;
+    const n = matrizOriginal[0].length;
+    const numDecisionVars = n - (constraintTypes.filter(t => t !== '=').length);
+    let artificialVarCount = 0;
+    constraintTypes.forEach(type => {
+        if (type === '>=' || type === '=') {
+            artificialVarCount++;
+        }
     });
-    const expressaoArtificial = Array(n).fill(0).concat(Array(m).fill(1));
+    const matrizComArtificiais = matrizOriginal.map(linha => [...linha, ...Array(artificialVarCount).fill(0)]);
+    let currentArtificialIndex = 0;
     const colunasParaBasica = [];
-    const colunasParaNaoBasica = [];
-    for (let i = 0; i < n + m; i++) {
-        if (i >= n)
-            colunasParaBasica.push(i);
-        else
-            colunasParaNaoBasica.push(i);
+    let slackSurplusIndex = 0;
+    for (let i = 0; i < m; i++) {
+        if (constraintTypes[i] === '<=') {
+            colunasParaBasica.push(numDecisionVars + slackSurplusIndex);
+            slackSurplusIndex++;
+        }
+        else if (constraintTypes[i] === '>=') {
+            matrizComArtificiais[i][n + currentArtificialIndex] = 1;
+            colunasParaBasica.push(n + currentArtificialIndex);
+            currentArtificialIndex++;
+            slackSurplusIndex++;
+        }
+        else { // '='
+            matrizComArtificiais[i][n + currentArtificialIndex] = 1;
+            colunasParaBasica.push(n + currentArtificialIndex);
+            currentArtificialIndex++;
+        }
     }
-    const matrizBasica = matrizComArtificiais.map(linha => colunasParaBasica.map(i => linha[i]));
-    const matrizNaoBasica = matrizComArtificiais.map(linha => colunasParaNaoBasica.map(i => linha[i]));
-    const resultadoFase1 = faseII(matrizComArtificiais, matrizBasica, colunasParaBasica, matrizNaoBasica, colunasParaNaoBasica, valoresDesigualdade, expressaoArtificial, "min");
+    const expressaoArtificial = Array(n).fill(0).concat(Array(artificialVarCount).fill(1));
+    const colunasParaNaoBasica = [];
+    const allVarsIndices = Array.from({ length: n + artificialVarCount }, (_, i) => i);
+    allVarsIndices.forEach(i => {
+        if (!colunasParaBasica.includes(i)) {
+            colunasParaNaoBasica.push(i);
+        }
+    });
+    // Corrigir a função objetivo da Fase I para canonicidade
+    for (let i = 0; i < m; i++) {
+        if (matrizComArtificiais[i][colunasParaBasica[i]] === 1 && expressaoArtificial[colunasParaBasica[i]] === 1) {
+            for (let j = 0; j < expressaoArtificial.length; j++) {
+                expressaoArtificial[j] -= matrizComArtificiais[i][j];
+            }
+        }
+    }
+    const matrizBasicaFase1 = matrizComArtificiais.map(linha => colunasParaBasica.map(i => linha[i]));
+    const matrizNaoBasicaFase1 = matrizComArtificiais.map(linha => colunasParaNaoBasica.map(i => linha[i]));
+    const resultadoFase1 = faseII(matrizComArtificiais, matrizBasicaFase1, colunasParaBasica, matrizNaoBasicaFase1, colunasParaNaoBasica, valoresDesigualdade, expressaoArtificial, "min");
     if (resultadoFase1 === null || resultadoFase1[0] > 1e-6) {
+        console.log("Problema inviável (Fase I > 0).");
         return null;
     }
-    const matrizSemArtificiais = matrizComArtificiais.map(linha => linha.slice(0, n));
-    let novaColunasParaBasica = colunasParaBasica.filter(c => c < n);
-    let novaColunasParaNaoBasica = colunasParaNaoBasica.filter(c => c < n);
-    while (novaColunasParaBasica.length < m) {
-        const candidato = novaColunasParaNaoBasica.shift();
-        if (candidato !== undefined)
-            novaColunasParaBasica.push(candidato);
+    const solucaoFase1 = resultadoFase1[1];
+    let novaColunasParaBasica = [];
+    for (let i = 0; i < colunasParaBasica.length; i++) {
+        const colIndex = colunasParaBasica[i];
+        if (colIndex < n) { // Manter variáveis originais e de folga/excesso
+            novaColunasParaBasica.push(colIndex);
+        }
     }
+    // Se uma variável artificial ainda estiver na base com valor zero, ela deve ser trocada.
+    const nonBasicOriginalAndSlack = colunasParaNaoBasica.filter(c => c < n);
+    while (novaColunasParaBasica.length < m) {
+        const candidato = nonBasicOriginalAndSlack.shift();
+        if (candidato !== undefined) {
+            novaColunasParaBasica.push(candidato);
+        }
+        else {
+            console.log("Não foi possível remover todas as variáveis artificiais da base.");
+            return null; // Degenerescência ou redundância
+        }
+    }
+    const novaColunasParaNaoBasica = [];
+    const originalAndSlackIndices = Array.from({ length: n }, (_, i) => i);
+    originalAndSlackIndices.forEach(i => {
+        if (!novaColunasParaBasica.includes(i)) {
+            novaColunasParaNaoBasica.push(i);
+        }
+    });
+    const matrizSemArtificiais = matrizOriginal;
     const novaMatrizBasica = matrizSemArtificiais.map(linha => novaColunasParaBasica.map(i => linha[i]));
     const novaMatrizNaoBasica = matrizSemArtificiais.map(linha => novaColunasParaNaoBasica.map(i => linha[i]));
     return faseII(matrizSemArtificiais, novaMatrizBasica, novaColunasParaBasica, novaMatrizNaoBasica, novaColunasParaNaoBasica, valoresDesigualdade, vetorExpressaoPrincipal, tipoOtimizacao);
@@ -53,40 +102,33 @@ function faseII(matrizCompleta, matrizBasica, colunasParaBasica, matrizNaoBasica
     }
     const vetorB = valoresDesigualdade.map(i => [i]);
     const xBasico = (0, mult_1.multiplicaMatriz)(inversaBasica, vetorB);
-    if (xBasico.some(x => x[0] < -1e-6)) {
-        return null;
-    }
-    const custoBasico = [colunasParaBasica.map(i => vetorExpressaoPrincipal[i])];
+    const custoBasico = [colunasParaBasica.map(i => vetorExpressaoPrincipal[i] || 0)];
     const yt = (0, mult_1.multiplicaMatriz)(custoBasico, inversaBasica);
-    const custoNaoBasico = [colunasParaNaoBasica.map(i => vetorExpressaoPrincipal[i])];
-    const aNj = matrizCompleta.map(linha => colunasParaNaoBasica.map(j => linha[j]));
+    const custoNaoBasico = [colunasParaNaoBasica.map(i => vetorExpressaoPrincipal[i] || 0)];
+    const aNj = matrizNaoBasica;
     const multiplicacao = (0, mult_1.multiplicaMatriz)(yt, aNj);
     const custoRelativo = custoNaoBasico[0].map((val, i) => val - multiplicacao[0][i]);
     const menorCusto = Math.min(...custoRelativo);
-    const indiceVariavelEntrada = custoRelativo.indexOf(menorCusto);
-    if (menorCusto >= -1e-6) {
+    if (menorCusto >= -1e-9) { // Critério de otimalidade
         let valorOtimo = 0;
-        for (let i = 0; i < custoBasico[0].length; i++) {
-            valorOtimo += custoBasico[0][i] * xBasico[i][0];
-        }
-        if (tipoOtimizacao === "max") {
-            valorOtimo *= -1;
-        }
+        const ytB = (0, mult_1.multiplicaMatriz)(yt, vetorB);
+        valorOtimo = ytB[0][0];
         const vetorSolucao = Array(vetorExpressaoPrincipal.length).fill(0);
         for (let i = 0; i < xBasico.length; i++) {
             vetorSolucao[colunasParaBasica[i]] = xBasico[i][0];
         }
         return [valorOtimo, vetorSolucao, iteracao];
     }
+    const indiceVariavelEntrada = custoRelativo.indexOf(menorCusto);
     const direcao = (0, mult_1.multiplicaMatriz)(inversaBasica, matrizCompleta.map(linha => [linha[colunasParaNaoBasica[indiceVariavelEntrada]]]));
-    if (direcao.every(x => x[0] <= 1e-6)) {
+    if (direcao.every(x => x[0] <= 1e-9)) {
         console.log("Problema ilimitado");
         return null;
     }
     let passo = Infinity;
     let indiceSaida = -1;
     for (let i = 0; i < direcao.length; i++) {
-        if (direcao[i][0] > 1e-6) {
+        if (direcao[i][0] > 1e-9) {
             const razao = xBasico[i][0] / direcao[i][0];
             if (razao < passo) {
                 passo = razao;
@@ -95,28 +137,13 @@ function faseII(matrizCompleta, matrizBasica, colunasParaBasica, matrizNaoBasica
         }
     }
     if (indiceSaida === -1) {
-        console.log("Problema ilimitado");
+        console.log("Problema ilimitado (nenhuma variável de saída encontrada).");
         return null;
     }
     const entrada = colunasParaNaoBasica[indiceVariavelEntrada];
     const saida = colunasParaBasica[indiceSaida];
     colunasParaBasica[indiceSaida] = entrada;
     colunasParaNaoBasica[indiceVariavelEntrada] = saida;
+    colunasParaNaoBasica.sort((a, b) => a - b);
     return faseII(matrizCompleta, matrizCompleta.map(linha => colunasParaBasica.map(i => linha[i])), colunasParaBasica, matrizCompleta.map(linha => colunasParaNaoBasica.map(i => linha[i])), colunasParaNaoBasica, valoresDesigualdade, vetorExpressaoPrincipal, tipoOtimizacao, iteracao + 1);
-}
-function verificaFaseI(array, vetorExpressaoPrincipal, valoresDesigualdade, matrizCompleta) {
-    if (array[0].toLowerCase().startsWith("max")) {
-        for (let i = 0; i < vetorExpressaoPrincipal.length; i++) {
-            vetorExpressaoPrincipal[i] *= -1;
-        }
-    }
-    for (let i = 1; i < array.length; i++) {
-        if (array[i].includes(">=") || array[i].includes(">")) {
-            return [true, vetorExpressaoPrincipal, matrizCompleta];
-        }
-        if (array[i].includes("=") && !array[i].includes(">=") && !array[i].includes("<=")) {
-            return [true, vetorExpressaoPrincipal, matrizCompleta];
-        }
-    }
-    return [false, vetorExpressaoPrincipal, matrizCompleta];
 }

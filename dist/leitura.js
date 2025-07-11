@@ -34,11 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.lerTxt = lerTxt;
-exports.lerRestricoes = lerRestricoes;
-exports.lerQuantidadeX = lerQuantidadeX;
-exports.adicionarVariaveis = adicionarVariaveis;
-exports.adicionarVariaveis2 = adicionarVariaveis2;
-exports.preencherMatriz = preencherMatriz;
+exports.parseProblem = parseProblem;
 const fs = __importStar(require("fs"));
 function lerTxt() {
     const array = fs.readFileSync("entrada.txt", "utf-8")
@@ -47,110 +43,61 @@ function lerTxt() {
         .filter(linha => linha !== "");
     return array;
 }
-function lerRestricoes(array) {
-    let contadorDeLinhas = 0;
-    for (let i = 1; i < array.length; i++) {
-        if (array[i].includes(">=") || array[i].includes("<=")) {
-            contadorDeLinhas++;
+function parseProblem(array) {
+    // 1. Analisa a Função Objetiva
+    const objectiveStr = array[0];
+    const optimizationType = objectiveStr.toLowerCase().startsWith("max") ? "max" : "min";
+    const decisionVarRegex = /x(\d+)/g;
+    let maxVarIndex = 0;
+    let match;
+    const fullText = array.join(' ');
+    while ((match = decisionVarRegex.exec(fullText)) !== null) {
+        maxVarIndex = Math.max(maxVarIndex, parseInt(match[1]));
+    }
+    const numDecisionVars = maxVarIndex;
+    const objectiveCoefficients = Array(numDecisionVars).fill(0);
+    const coeffRegex = /([+-]?\d*\.?\d*)\*?x(\d+)/g;
+    while ((match = coeffRegex.exec(objectiveStr)) !== null) {
+        let coef = match[1];
+        if (coef === "" || coef === "+")
+            coef = "1";
+        else if (coef === "-")
+            coef = "-1";
+        const xIndex = parseInt(match[2]) - 1;
+        if (xIndex < numDecisionVars) {
+            objectiveCoefficients[xIndex] = parseFloat(coef);
         }
     }
-    return contadorDeLinhas;
-}
-function lerQuantidadeX(array) {
-    let contadorDeX = 0;
-    for (let i = 0; i < array[0].length; i++) {
-        if (array[0][i] === "x") {
-            contadorDeX++;
-        }
-    }
-    let tipoOtimizacao;
-    if (array[0].toLocaleLowerCase().startsWith("max")) {
-        tipoOtimizacao = "max";
-        contadorDeX--;
-    }
-    else {
-        tipoOtimizacao = "min";
-    }
-    return [contadorDeX, tipoOtimizacao];
-}
-function adicionarVariaveis(array, contadorDeX) {
-    let indiceVariavelArtificial = contadorDeX + 1;
-    const valoresDesigualdade = [];
-    for (let i = 1; i < array.length; i++) {
-        if (array[i].includes(">=")) {
-            const [esquerda, direita] = array[i].split(">=");
-            valoresDesigualdade.push(eval(direita));
-            array[i] = `${esquerda}-x${indiceVariavelArtificial}>=${direita}`;
-            indiceVariavelArtificial++;
-        }
-        else if (array[i].includes("<=")) {
-            const [esquerda, direita] = array[i].split("<=");
-            valoresDesigualdade.push(eval(direita));
-            array[i] = `${esquerda}+x${indiceVariavelArtificial}<=${direita}`;
-            indiceVariavelArtificial++;
-        }
-        else if (array[i].includes("=")) {
-            const [esquerda, direita] = array[i].split("=");
-            valoresDesigualdade.push(eval(direita));
-        }
-    }
-    return valoresDesigualdade;
-}
-function adicionarVariaveis2(array) {
-    const valoresDesigualdade = [];
-    let indiceSlack = 1;
-    let indiceArtificial = 1;
-    for (let i = 0; i < array.length; i++) {
-        if (array[i].includes("<=")) {
-            const [lhs, rhs] = array[i].split("<=");
-            valoresDesigualdade.push(eval(rhs));
-            array[i] = `${lhs}+s${indiceSlack}=${rhs}`;
-            indiceSlack++;
-        }
-        else if (array[i].includes(">=")) {
-            const [lhs, rhs] = array[i].split(">=");
-            valoresDesigualdade.push(eval(rhs));
-            array[i] = `${lhs}-s${indiceSlack}+a${indiceArtificial}=${rhs}`;
-            indiceSlack++;
-            indiceArtificial++;
-        }
-        else if (array[i].includes("=")) {
-            const [lhs, rhs] = array[i].split("=");
-            valoresDesigualdade.push(eval(rhs));
-            array[i] = `${lhs}+a${indiceArtificial}=${rhs}`;
-            indiceArtificial++;
-        }
-    }
-    return [array, valoresDesigualdade];
-}
-function preencherMatriz(array, contadorDeX, contadorDeLinhas) {
-    const matrizCompleta = Array(array.length - 1)
-        .fill(0)
-        .map(() => Array(contadorDeX + contadorDeLinhas).fill(0));
-    const regex = /([+-]?\d*\.?\d*)\*?x(\d+)/g;
-    const vetorExpressaoPrincipal = [];
-    for (let i = 0; i < array.length; i++) {
-        const expr = array[i];
-        let match;
-        while ((match = regex.exec(expr)) !== null) {
+    // 2. Analisa as Restrições
+    const constraints = array.slice(1);
+    const numConstraints = constraints.length;
+    const constraintMatrix = Array.from({ length: numConstraints }, () => Array(numDecisionVars).fill(0));
+    const constraintRhs = [];
+    const constraintTypes = [];
+    for (let i = 0; i < numConstraints; i++) {
+        const constraintStr = constraints[i];
+        let separator;
+        if (constraintStr.includes(">="))
+            separator = ">=";
+        else if (constraintStr.includes("<="))
+            separator = "<=";
+        else
+            separator = "=";
+        const [lhs, rhs] = constraintStr.split(separator);
+        constraintTypes.push(separator);
+        constraintRhs.push(eval(rhs));
+        const coeffRegexConst = /([+-]?\d*\.?\d*)\*?x(\d+)/g;
+        while ((match = coeffRegexConst.exec(lhs)) !== null) {
             let coef = match[1];
-            const xIndex = parseInt(match[2]) - 1;
-            if (coef === "" || coef === "+") {
+            if (coef === "" || coef === "+")
                 coef = "1";
-            }
-            else if (coef === "-") {
+            else if (coef === "-")
                 coef = "-1";
-            }
-            if (i === 0) {
-                vetorExpressaoPrincipal.push(parseFloat(coef));
-            }
-            else {
-                matrizCompleta[i - 1][xIndex] = parseFloat(coef);
+            const xIndex = parseInt(match[2]) - 1;
+            if (xIndex < numDecisionVars) {
+                constraintMatrix[i][xIndex] = parseFloat(coef);
             }
         }
     }
-    for (let i = 0; i < contadorDeLinhas; i++) {
-        vetorExpressaoPrincipal.push(0);
-    }
-    return [matrizCompleta, vetorExpressaoPrincipal];
+    return { optimizationType, objectiveCoefficients, constraintMatrix, constraintRhs, constraintTypes };
 }
